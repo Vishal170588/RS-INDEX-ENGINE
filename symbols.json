@@ -1,0 +1,14 @@
+{
+  "NIFTY": {
+    "exchange": "NSE",
+    "symbol": "NIFTY"
+  },
+  "BANKNIFTY": {
+    "exchange": "NSE",
+    "symbol": "BANKNIFTY"
+  },
+  "SENSEX": {
+    "exchange": "BSE",
+    "symbol": "SENSEX"
+  }
+}
