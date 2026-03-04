@@ -25,8 +25,22 @@ def send_startup_message():
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 send_startup_message()
+def bot_alive():
+    message = "🟢 BOT ALIVE\n\nMASTERQUANT RSI ENGINE RUNNING"
 
-SCAN_INTERVAL = 60
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+
+    try:
+        requests.post(url, json=payload)
+    except Exception as e:
+        print("Alive message failed:", e)
+        
+    SCAN_INTERVAL = 60
 
 INDICES = [
     "NIFTY",
@@ -188,6 +202,7 @@ def run():
     print("RSI INDEX ENGINE STARTED")
 
     while True:
+        bot_alive()
 
         for index in INDICES:
 
