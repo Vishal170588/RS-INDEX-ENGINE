@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
+SCAN_INTERVAL = 60
+
 def send_startup_message():
     message = "🚀 MASTERQUANT RSI ENGINE ONLINE\n\nScanner started successfully."
 
