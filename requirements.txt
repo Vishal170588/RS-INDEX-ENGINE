@@ -1,0 +1,6 @@
+equests
+pandas
+numpy
+schedule
+smartapi-python
+pyotp
