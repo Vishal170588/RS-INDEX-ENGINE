@@ -302,17 +302,17 @@ RSI: {round(rsi_now,2)}
 Book 50% Partial Profit
 """)
 
-                if price <= state.stop:
+    if price <= state.stop:
 
-                    send_telegram(f"""
+        send_telegram(f"""
 ⚠️ STOPLOSS TRIGGERED
 
 {index}
 """)
 
-                    states[index] = TradeState()
+        states[index] = TradeState()
 
-                if rsi_now >= state.rsi_signal + 3:
+                if rsi_now >= state.rsi_signal + 4:
 
                     send_telegram(f"""
 🔥 MOMENTUM EXPANSION
