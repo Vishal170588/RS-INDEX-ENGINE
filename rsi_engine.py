@@ -281,8 +281,7 @@ RSI: {round(rsi_now,2)}
 
 
 # Stage 2 trade expansion
-if rsi_now >= state.rsi_signal + 4:
-
+if not state.expansion_sent and rsi_now >= state.rsi_signal + 4:
     send_telegram(f"""
 🚀 MOMENTUM EXPANSION
 
@@ -290,6 +289,7 @@ if rsi_now >= state.rsi_signal + 4:
 
 RSI: {round(rsi_now,2)}
 """)
+    state.expansion_sent = True
     if not state.partial_done and price >= state.target:
 
                     state.partial_done = True
