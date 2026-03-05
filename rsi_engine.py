@@ -214,6 +214,7 @@ def run():
         
 
         for index in INDICES:
+            print(f"Scanning {index} at {datatime.now(0}")
 
             state = states[index]
 
