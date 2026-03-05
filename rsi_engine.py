@@ -236,6 +236,8 @@ def run():
                 state.stop = stop
                 state.target = target
                 state.rsi_signal = signal["rsi"]
+                state.alert_sent = False
+                state.expansion_sent = False
 
                 message = f"""
 🚀 {index} BUY SIGNAL
@@ -266,8 +268,29 @@ Buy ATM CE
                 price = df["close"].iloc[-1]
 
                 rsi_now = df["rsi"].iloc[-1]
+                if not state.alert_sent and rsi_now >= state.rsi_signal + 2:
+                        send_telegram(f"""
+⚠️ MOMENTUM BUILDING
 
-                if not state.partial_done and price >= state.target:
+{index}
+
+RSI: {round(rsi_now,2)}
+""")
+
+    state.alert_sent = True
+
+
+# Stage 2 trade expansion
+if rsi_now >= state.rsi_signal + 4:
+
+    send_telegram(f"""
+🚀 MOMENTUM EXPANSION
+
+{index}
+
+RSI: {round(rsi_now,2)}
+""")
+    if not state.partial_done and price >= state.target:
 
                     state.partial_done = True
 
