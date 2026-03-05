@@ -205,7 +205,6 @@ def run():
     bot_alive()
     
     while True:
-        print("ENGINE LOOP RUNNING")
         
         now = datetime.now()
 
@@ -221,7 +220,7 @@ def run():
             state = states[index]
 
             signal = check_signal(index)
-
+            print(f"{index} signal -> {signal}")
             if signal and not state.active:
 
                 entry = signal["price"]
@@ -300,7 +299,7 @@ Book 50% Partial Profit
 RSI: {round(rsi_now,2)}
 """)
 
-        time.sleep(600)
+        time.sleep(300)
 
 # ================================
 # START ENGINE
