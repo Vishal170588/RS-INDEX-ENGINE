@@ -289,7 +289,7 @@ Book 50% Partial Profit
 
                     states[index] = TradeState()
 
-                if rsi_now >= state.rsi_signal + 5:
+                if rsi_now >= state.rsi_signal + 3:
 
                     send_telegram(f"""
 🔥 MOMENTUM EXPANSION
