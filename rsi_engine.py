@@ -300,7 +300,7 @@ Book 50% Partial Profit
 RSI: {round(rsi_now,2)}
 """)
 
-        time.sleep(SCAN_INTERVAL)
+        time.sleep(600)
 
 # ================================
 # START ENGINE
