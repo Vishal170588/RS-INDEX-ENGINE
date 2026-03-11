@@ -42,7 +42,7 @@ ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
 
-ANGEL_TOTP = os.getenv("ANGEL_TOTP")
+ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
 
 if not ANGEL_TOTP:
     raise Exception("ANGEL_TOTP missing in Railway variables")
