@@ -146,4 +146,77 @@ def check_signal(symbol):
 
         price = df["close"].iloc[-1]
 
-       
+        return {
+            "price": round(price,2),
+            "rsi": round(rsi,2),
+            "stop": round(df["low"].iloc[-2],2)
+        }
+
+    return None
+
+# ================================
+# MAIN ENGINE
+# ================================
+
+def run():
+
+    print("RSI INDEX ENGINE STARTED")
+
+    send_telegram("🚀 MASTERQUANT RSI ENGINE ONLINE")
+
+    while True:
+
+        now = datetime.now()
+
+        market_open = now.replace(hour=9, minute=15)
+        market_close = now.replace(hour=15, minute=30)
+
+        if market_open <= now <= market_close:
+
+            for index in INDICES:
+
+                print(f"Scanning {index} at {datetime.now()}")
+
+                state = states[index]
+
+                signal = check_signal(index)
+
+                if signal and not state.active:
+
+                    entry = signal["price"]
+                    stop = signal["stop"]
+
+                    risk = entry - stop
+
+                    target = entry + risk
+
+                    state.active = True
+                    state.entry = entry
+                    state.stop = stop
+                    state.target = target
+                    state.rsi_signal = signal["rsi"]
+
+                    message = f"""
+🚀 {index} BUY SIGNAL
+
+RSI: {signal['rsi']}
+
+Entry: {entry}
+Stoploss: {stop}
+
+Target 1: {round(target,2)}
+
+Action:
+Buy ATM CE
+"""
+
+                    send_telegram(message)
+
+        time.sleep(SCAN_INTERVAL)
+
+# ================================
+# START ENGINE
+# ================================
+
+if __name__ == "__main__":
+    run()
