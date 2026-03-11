@@ -44,8 +44,8 @@ ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD")
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP")
-
-print("TOTP loaded:", ANGEL_TOTP_SECRET)
+print("ENV KEYS:", list(os.environ.keys()))
+print("TOTP VALUE:", os.environ.get("ANGEL_TOTP"))
 
 totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
