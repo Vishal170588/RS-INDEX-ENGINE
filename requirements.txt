@@ -6,3 +6,4 @@ schedule
 smartapi-python
 pyotp
 logzero
+websocket-client
