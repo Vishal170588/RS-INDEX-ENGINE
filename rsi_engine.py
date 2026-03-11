@@ -42,15 +42,12 @@ ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
 
-ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP", "").replace(" ", "").strip().upper()
+ANGEL_TOTP = os.getenv("ANGEL_TOTP")
 
-print("TOTP VALUE:", ANGEL_TOTP_SECRET)
-
-if not ANGEL_TOTP_SECRET:
+if not ANGEL_TOTP:
     raise Exception("ANGEL_TOTP missing in Railway variables")
 
-totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
-
+totp = ANGEL_TOTP
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
