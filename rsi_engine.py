@@ -43,10 +43,12 @@ from SmartApi import SmartConnect
 ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD")
-ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP")
-print("ENV KEYS:", list(os.environ.keys()))
-print("TOTP VALUE:", os.environ.get("ANGEL_TOTP"))
+ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP", "").strip()
 
+print("TOTP VALUE:", ANGEL_TOTP_SECRET)
+
+if ANGEL_TOTP_SECRET == "":
+    raise Exception("ANGEL_TOTP missing in Railway variables")
 totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
@@ -57,8 +59,10 @@ session = smart.generateSession(
     totp
 )
 
-print("Angel Login Successful")# ================================
-# INDEX TOKENS
+print("Angel Login Successful")
+
+
+ INDEX TOKENS
 # ================================
 
 INDICES = {
