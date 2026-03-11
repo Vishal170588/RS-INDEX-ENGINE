@@ -40,14 +40,13 @@ import os
 import pyotp
 from SmartApi import SmartConnect
 
-ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
-ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
-ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
-ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP")
+ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY")
+ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID")
+ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD")
+ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP")
 
-if ANGEL_TOTP_SECRET == "":
-    print("WARNING: ANGEL_TOTP missing")
-    
+print("TOTP loaded:", ANGEL_TOTP_SECRET)
+
 totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
@@ -57,8 +56,8 @@ session = smart.generateSession(
     ANGEL_PASSWORD,
     totp
 )
-print("Angel Login Successful")
-# ================================
+
+print("Angel Login Successful")# ================================
 # INDEX TOKENS
 # ================================
 
