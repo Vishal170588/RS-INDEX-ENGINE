@@ -36,22 +36,29 @@ def send_telegram(msg):
 # ================================
 # ANGEL LOGIN
 # ================================
+import os
+import pyotp
+from SmartApi import SmartConnect
 
 ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
-ANGEL_TOTP = os.getenv("ANGEL_TOTP")
+ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP")
+
+if not ANGEL_TOTP_SECRET:
+    raise Exception("ANGEL_TOTP not found in environment variables")
+
+totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
     ANGEL_CLIENT_ID,
     ANGEL_PASSWORD,
-    pyotp.TOTP(ANGEL_TOTP).now()
+    totp
 )
 
-feed_token = smart.getfeedToken()
-
+print("Angel Login Successful")
 # ================================
 # INDEX TOKENS
 # ================================
