@@ -45,9 +45,9 @@ ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
 ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP")
 
-if not ANGEL_TOTP_SECRET:
-    raise Exception("ANGEL_TOTP not found in environment variables")
-
+if ANGEL_TOTP_SECRET == "":
+    print("WARNING: ANGEL_TOTP missing")
+    
 totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
@@ -57,7 +57,6 @@ session = smart.generateSession(
     ANGEL_PASSWORD,
     totp
 )
-
 print("Angel Login Successful")
 # ================================
 # INDEX TOKENS
