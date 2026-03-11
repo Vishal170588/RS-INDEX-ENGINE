@@ -3,7 +3,6 @@ import time
 import requests
 import pandas as pd
 import numpy as np
-import pyotp
 from datetime import datetime
 from SmartApi import SmartConnect
 
@@ -47,7 +46,7 @@ ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
 if not ANGEL_TOTP:
     raise Exception("ANGEL_TOTP missing in Railway variables")
 
-totp = ANGEL_TOTP
+totp = os.getenv("ANGEL_TOTP", "").strip()
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
