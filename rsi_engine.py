@@ -4,9 +4,8 @@ import time
 import requests
 import pandas as pd
 import pyotp
-from datetime import datetime
+from datetime import datetime, timedelta
 from SmartApi import SmartConnect
-
 
 SCAN_INTERVAL = 300  # 5 minutes
 
@@ -43,16 +42,16 @@ def send_telegram(msg):
 ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
-ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
+ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET")
 
-totp = SmartConnect(api_key=ANGEL_API_KEY)
+totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
     ANGEL_CLIENT_ID,
     ANGEL_PASSWORD,
-    ANGEL_TOTP
+    totp
 )
 
 print("Angel Login Successful")
@@ -91,35 +90,49 @@ def calculate_rsi(series, period=14):
 
 
 # ================================
-# FETCH ANGEL CANDLES
+# SAFE CANDLE FETCH
 # ================================
 
 def fetch_candles(symbol, interval):
 
-    params = {
-        "exchange": "NSE",
-        "symboltoken": INDICES[symbol],
-        "interval": interval,
-        "fromdate": "2024-01-01 09:15",
-        "todate": datetime.now().strftime("%Y-%m-%d %H:%M")
-    }
+    try:
 
-    data = smart.getCandleData(params)
+        from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d %H:%M")
+        to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    candles = data["data"]
+        params = {
+            "exchange": "NSE",
+            "symboltoken": INDICES[symbol],
+            "interval": interval,
+            "fromdate": from_date,
+            "todate": to_date
+        }
 
-    df = pd.DataFrame(
-        candles,
-        columns=["time","open","high","low","close","volume"]
-    )
+        data = smart.getCandleData(params)
 
-    df["close"] = df["close"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
+        if not data or "data" not in data or not data["data"]:
+            print(f"No data returned for {symbol}")
+            return None
 
-    df["rsi"] = calculate_rsi(df["close"])
+        candles = data["data"]
 
-    return df
+        df = pd.DataFrame(
+            candles,
+            columns=["time","open","high","low","close","volume"]
+        )
+
+        df["close"] = df["close"].astype(float)
+        df["high"] = df["high"].astype(float)
+        df["low"] = df["low"].astype(float)
+
+        df["rsi"] = calculate_rsi(df["close"])
+
+        return df
+
+    except Exception as e:
+
+        print("Candle fetch error:", e)
+        return None
 
 
 # ================================
@@ -138,27 +151,16 @@ def rsi_regime(rsi):
 
 
 # ================================
-# RSI COMPRESSION
-# ================================
-
-def rsi_compression(rsi_series):
-
-    last5 = rsi_series.tail(5)
-
-    if last5.max() - last5.min() <= 3:
-        return "YES"
-
-    return "NO"
-
-
-# ================================
-# RSI SIGNAL
+# SIGNAL LOGIC
 # ================================
 
 def check_signal(symbol):
 
     df5 = fetch_candles(symbol, "FIVE_MINUTE")
     df15 = fetch_candles(symbol, "FIFTEEN_MINUTE")
+
+    if df5 is None or df15 is None:
+        return None
 
     rsi5 = df5["rsi"]
     rsi15 = df15["rsi"].iloc[-1]
@@ -168,8 +170,6 @@ def check_signal(symbol):
     r3 = rsi5.iloc[-3]
 
     expansion = round(r1 - r2,2)
-
-    compression = rsi_compression(rsi5)
 
     regime = rsi_regime(rsi15)
 
@@ -185,7 +185,6 @@ def check_signal(symbol):
             "rsi15": round(rsi15,2),
             "expansion": expansion,
             "regime": regime,
-            "compression": compression,
             "stop": round(df5["low"].iloc[-2],2)
         }
 
@@ -199,7 +198,6 @@ def check_signal(symbol):
             "rsi15": round(rsi15,2),
             "expansion": expansion,
             "regime": regime,
-            "compression": compression,
             "stop": round(df5["high"].iloc[-2],2)
         }
 
@@ -207,41 +205,41 @@ def check_signal(symbol):
 
 
 # ================================
-# ENGINE
+# ENGINE LOOP
 # ================================
 
 def run():
 
     print("RSI INDEX ENGINE STARTED")
-    send_telegram("🚀 MASTERQUANT RSI ENGINE ONLINE")
+    send_telegram("🚀 RSI INDEX ENGINE ONLINE")
 
     while True:
 
-        now = datetime.now()
+        try:
 
-        market_open = now.replace(hour=9, minute=15)
-        market_close = now.replace(hour=15, minute=30)
+            now = datetime.now()
 
-        if market_open <= now <= market_close:
+            market_open = now.replace(hour=9, minute=15)
+            market_close = now.replace(hour=15, minute=30)
 
-            for index in INDICES:
+            if market_open <= now <= market_close:
 
-                print(f"Scanning {index} at {datetime.now()}")
+                for index in INDICES:
 
-                signal = check_signal(index)
+                    print(f"Scanning {index}")
 
-                print(f"{index} signal -> {signal}")
+                    signal = check_signal(index)
 
-                if signal:
+                    if signal:
 
-                    entry = signal["price"]
-                    stop = signal["stop"]
+                        entry = signal["price"]
+                        stop = signal["stop"]
 
-                    risk = abs(entry - stop)
+                        risk = abs(entry - stop)
 
-                    target = entry + risk if signal["type"] == "BUY" else entry - risk
+                        target = entry + risk if signal["type"] == "BUY" else entry - risk
 
-                    message = f"""
+                        message = f"""
 🚀 {index} {signal["type"]} SIGNAL
 
 Price: {entry}
@@ -251,7 +249,6 @@ Price: {entry}
 
 RSI Expansion: {signal["expansion"]}
 RSI Regime: {signal["regime"]}
-RSI Compression Break: {signal["compression"]}
 
 Stoploss: {stop}
 Target: {round(target,2)}
@@ -260,9 +257,14 @@ Action:
 {"Buy ATM CE" if signal["type"]=="BUY" else "Buy ATM PE"}
 """
 
-                    send_telegram(message)
+                        send_telegram(message)
 
-        time.sleep(SCAN_INTERVAL)
+            time.sleep(SCAN_INTERVAL)
+
+        except Exception as e:
+
+            print("Engine error:", e)
+            time.sleep(10)
 
 
 # ================================
