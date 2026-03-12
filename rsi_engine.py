@@ -2,18 +2,18 @@ import os
 import time
 import requests
 import pandas as pd
-import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from SmartApi import SmartConnect
+import pyotp
 
-SCAN_INTERVAL = 60
+SCAN_INTERVAL = 900   # 15 minutes
 
 # ================================
 # TELEGRAM
 # ================================
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_TOKEN = "8464017129:AAFoqp5h0MsQqgbiuAFA2KRi3dlBvD48i60"
+TELEGRAM_CHAT_ID = "-1003526964518"
 
 def send_telegram(msg):
 
@@ -37,16 +37,13 @@ def send_telegram(msg):
 # ANGEL LOGIN
 # ================================
 
-ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
-ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
-ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
+ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY")
+ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID")
+ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD")
+ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP")
 
-ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
+totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
 
-if not ANGEL_TOTP:
-    raise Exception("ANGEL_TOTP missing in Railway variables")
-
-totp = os.getenv("ANGEL_TOTP", "").strip()
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
@@ -56,10 +53,11 @@ session = smart.generateSession(
 )
 
 print("Angel Login Successful")
+send_telegram("🚀 MASTERQUANT RSI INDEX ENGINE STARTED")
 
-# ===============================
+# ================================
 # INDEX TOKENS
-# ===============================
+# ================================
 
 INDICES = {
     "NIFTY": "99926000",
@@ -88,19 +86,34 @@ def calculate_rsi(series, period=14):
     return rsi
 
 # ================================
-# MOCK DATA (Replace with Angel)
+# FETCH CANDLES
 # ================================
 
 def fetch_candles(symbol):
 
-    price = np.cumsum(np.random.randn(100)) + 100
+    from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+    to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    df = pd.DataFrame({
-        "close": price
-    })
+    params = {
+        "exchange": "NSE",
+        "symboltoken": INDICES[symbol],
+        "interval": "FIFTEEN_MINUTE",
+        "fromdate": from_date,
+        "todate": to_date
+    }
 
-    df["high"] = df["close"] + np.random.rand(len(df))
-    df["low"] = df["close"] - np.random.rand(len(df))
+    data = smart.getCandleData(params)
+
+    candles = data["data"]
+
+    df = pd.DataFrame(
+        candles,
+        columns=["time","open","high","low","close","volume"]
+    )
+
+    df["close"] = df["close"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
 
     df["rsi"] = calculate_rsi(df["close"])
 
@@ -115,18 +128,19 @@ class TradeState:
     def __init__(self):
 
         self.active = False
+        self.type = None
         self.entry = None
         self.stop = None
         self.target = None
         self.rsi_signal = None
-        self.partial_done = False
         self.alert_sent = False
         self.expansion_sent = False
+        self.partial_done = False
 
 states = {i: TradeState() for i in INDICES}
 
 # ================================
-# SIGNAL CHECK
+# SIGNAL DETECTION
 # ================================
 
 def check_signal(symbol):
@@ -134,31 +148,37 @@ def check_signal(symbol):
     df = fetch_candles(symbol)
 
     rsi = df["rsi"].iloc[-1]
-    prev_rsi = df["rsi"].iloc[-2]
+    rsi_prev = df["rsi"].iloc[-2]
 
-    momentum = rsi - prev_rsi
+    price = df["close"].iloc[-1]
 
-    if momentum >= 2 and rsi < 80:
-
-        price = df["close"].iloc[-1]
+    if rsi > 50 and rsi_prev <= 50:
 
         return {
+            "type": "BUY",
             "price": round(price,2),
             "rsi": round(rsi,2),
             "stop": round(df["low"].iloc[-2],2)
         }
 
+    if rsi < 50 and rsi_prev >= 50:
+
+        return {
+            "type": "SELL",
+            "price": round(price,2),
+            "rsi": round(rsi,2),
+            "stop": round(df["high"].iloc[-2],2)
+        }
+
     return None
 
 # ================================
-# MAIN ENGINE
+# ENGINE
 # ================================
 
 def run():
 
     print("RSI INDEX ENGINE STARTED")
-
-    send_telegram("🚀 MASTERQUANT RSI ENGINE ONLINE")
 
     while True:
 
@@ -171,7 +191,7 @@ def run():
 
             for index in INDICES:
 
-                print(f"Scanning {index} at {datetime.now()}")
+                print(f"[SCAN] {index} | {datetime.now().strftime('%H:%M:%S')}")
 
                 state = states[index]
 
@@ -182,37 +202,92 @@ def run():
                     entry = signal["price"]
                     stop = signal["stop"]
 
-                    risk = entry - stop
+                    risk = abs(entry - stop)
 
-                    target = entry + risk
+                    if signal["type"] == "BUY":
+                        target = entry + risk
+                    else:
+                        target = entry - risk
 
                     state.active = True
+                    state.type = signal["type"]
                     state.entry = entry
                     state.stop = stop
                     state.target = target
                     state.rsi_signal = signal["rsi"]
 
                     message = f"""
-🚀 {index} BUY SIGNAL
+🚀 {index} {signal["type"]} SIGNAL
 
-RSI: {signal['rsi']}
+RSI: {signal["rsi"]}
 
 Entry: {entry}
 Stoploss: {stop}
-
-Target 1: {round(target,2)}
+Target: {round(target,2)}
 
 Action:
-Buy ATM CE
+{"Buy ATM CE" if signal["type"]=="BUY" else "Buy ATM PE"}
 """
 
                     send_telegram(message)
 
-        time.sleep(SCAN_INTERVAL)
+                if state.active:
 
-# ================================
-# START ENGINE
-# ================================
+                    df = fetch_candles(index)
+
+                    price = df["close"].iloc[-1]
+                    rsi_now = df["rsi"].iloc[-1]
+
+                    if not state.alert_sent and rsi_now >= state.rsi_signal + 2:
+
+                        send_telegram(f"""
+⚠️ MOMENTUM BUILDING
+
+{index}
+RSI: {round(rsi_now,2)}
+""")
+
+                        state.alert_sent = True
+
+                    if not state.expansion_sent and rsi_now >= state.rsi_signal + 4:
+
+                        send_telegram(f"""
+🚀 MOMENTUM EXPANSION
+
+{index}
+RSI: {round(rsi_now,2)}
+""")
+
+                        state.expansion_sent = True
+
+                    if not state.partial_done and (
+                        (state.type=="BUY" and price >= state.target) or
+                        (state.type=="SELL" and price <= state.target)
+                    ):
+
+                        state.partial_done = True
+
+                        send_telegram(f"""
+🎯 TARGET HIT
+
+{index}
+Book 50% Partial Profit
+""")
+
+                    if (
+                        (state.type=="BUY" and price <= state.stop) or
+                        (state.type=="SELL" and price >= state.stop)
+                    ):
+
+                        send_telegram(f"""
+⚠️ STOPLOSS TRIGGERED
+
+{index}
+""")
+
+                        states[index] = TradeState()
+
+        time.sleep(SCAN_INTERVAL)
 
 if __name__ == "__main__":
     run()
