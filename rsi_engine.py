@@ -3,8 +3,10 @@ import os
 import time
 import requests
 import pandas as pd
+import pyotp
 from datetime import datetime
 from SmartApi import SmartConnect
+
 
 SCAN_INTERVAL = 300  # 5 minutes
 
@@ -42,6 +44,8 @@ ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
 ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
 ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
+
+totp = SmartConnect(api_key=ANGEL_API_KEY)
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
