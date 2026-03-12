@@ -1,19 +1,19 @@
+
 import os
 import time
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from SmartApi import SmartConnect
-import pyotp
 
-SCAN_INTERVAL = 900   # 15 minutes
+SCAN_INTERVAL = 300  # 5 minutes
 
 # ================================
 # TELEGRAM
 # ================================
 
-TELEGRAM_TOKEN = "8464017129:AAFoqp5h0MsQqgbiuAFA2KRi3dlBvD48i60"
-TELEGRAM_CHAT_ID = "-1003526964518"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_telegram(msg):
 
@@ -33,27 +33,26 @@ def send_telegram(msg):
     except Exception as e:
         print("Telegram error:", e)
 
+
 # ================================
 # ANGEL LOGIN
 # ================================
 
-ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY")
-ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID")
-ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD")
-ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP")
-
-totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
+ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
+ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
+ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
+ANGEL_TOTP = os.getenv("ANGEL_TOTP", "").strip()
 
 smart = SmartConnect(api_key=ANGEL_API_KEY)
 
 session = smart.generateSession(
     ANGEL_CLIENT_ID,
     ANGEL_PASSWORD,
-    totp
+    ANGEL_TOTP
 )
 
 print("Angel Login Successful")
-send_telegram("🚀 MASTERQUANT RSI INDEX ENGINE STARTED")
+
 
 # ================================
 # INDEX TOKENS
@@ -64,6 +63,7 @@ INDICES = {
     "BANKNIFTY": "99926009",
     "SENSEX": "99919000"
 }
+
 
 # ================================
 # RSI CALCULATION
@@ -85,21 +85,19 @@ def calculate_rsi(series, period=14):
 
     return rsi
 
+
 # ================================
-# FETCH CANDLES
+# FETCH ANGEL CANDLES
 # ================================
 
-def fetch_candles(symbol):
-
-    from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
-    to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+def fetch_candles(symbol, interval):
 
     params = {
         "exchange": "NSE",
         "symboltoken": INDICES[symbol],
-        "interval": "FIFTEEN_MINUTE",
-        "fromdate": from_date,
-        "todate": to_date
+        "interval": interval,
+        "fromdate": "2024-01-01 09:15",
+        "todate": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
 
     data = smart.getCandleData(params)
@@ -119,58 +117,90 @@ def fetch_candles(symbol):
 
     return df
 
-# ================================
-# TRADE STATE
-# ================================
-
-class TradeState:
-
-    def __init__(self):
-
-        self.active = False
-        self.type = None
-        self.entry = None
-        self.stop = None
-        self.target = None
-        self.rsi_signal = None
-        self.alert_sent = False
-        self.expansion_sent = False
-        self.partial_done = False
-
-states = {i: TradeState() for i in INDICES}
 
 # ================================
-# SIGNAL DETECTION
+# RSI REGIME
+# ================================
+
+def rsi_regime(rsi):
+
+    if rsi > 60:
+        return "BULLISH"
+
+    if rsi < 40:
+        return "BEARISH"
+
+    return "SIDEWAYS"
+
+
+# ================================
+# RSI COMPRESSION
+# ================================
+
+def rsi_compression(rsi_series):
+
+    last5 = rsi_series.tail(5)
+
+    if last5.max() - last5.min() <= 3:
+        return "YES"
+
+    return "NO"
+
+
+# ================================
+# RSI SIGNAL
 # ================================
 
 def check_signal(symbol):
 
-    df = fetch_candles(symbol)
+    df5 = fetch_candles(symbol, "FIVE_MINUTE")
+    df15 = fetch_candles(symbol, "FIFTEEN_MINUTE")
 
-    rsi = df["rsi"].iloc[-1]
-    rsi_prev = df["rsi"].iloc[-2]
+    rsi5 = df5["rsi"]
+    rsi15 = df15["rsi"].iloc[-1]
 
-    price = df["close"].iloc[-1]
+    r1 = rsi5.iloc[-1]
+    r2 = rsi5.iloc[-2]
+    r3 = rsi5.iloc[-3]
 
-    if rsi > 50 and rsi_prev <= 50:
+    expansion = round(r1 - r2,2)
+
+    compression = rsi_compression(rsi5)
+
+    regime = rsi_regime(rsi15)
+
+    price = df5["close"].iloc[-1]
+
+    # BUY STRUCTURE
+    if r2 > r3 and r1 > r2:
 
         return {
             "type": "BUY",
             "price": round(price,2),
-            "rsi": round(rsi,2),
-            "stop": round(df["low"].iloc[-2],2)
+            "rsi5": round(r1,2),
+            "rsi15": round(rsi15,2),
+            "expansion": expansion,
+            "regime": regime,
+            "compression": compression,
+            "stop": round(df5["low"].iloc[-2],2)
         }
 
-    if rsi < 50 and rsi_prev >= 50:
+    # SELL STRUCTURE
+    if r2 < r3 and r1 < r2:
 
         return {
             "type": "SELL",
             "price": round(price,2),
-            "rsi": round(rsi,2),
-            "stop": round(df["high"].iloc[-2],2)
+            "rsi5": round(r1,2),
+            "rsi15": round(rsi15,2),
+            "expansion": expansion,
+            "regime": regime,
+            "compression": compression,
+            "stop": round(df5["high"].iloc[-2],2)
         }
 
     return None
+
 
 # ================================
 # ENGINE
@@ -179,6 +209,7 @@ def check_signal(symbol):
 def run():
 
     print("RSI INDEX ENGINE STARTED")
+    send_telegram("🚀 MASTERQUANT RSI ENGINE ONLINE")
 
     while True:
 
@@ -191,37 +222,33 @@ def run():
 
             for index in INDICES:
 
-                print(f"[SCAN] {index} | {datetime.now().strftime('%H:%M:%S')}")
-
-                state = states[index]
+                print(f"Scanning {index} at {datetime.now()}")
 
                 signal = check_signal(index)
 
-                if signal and not state.active:
+                print(f"{index} signal -> {signal}")
+
+                if signal:
 
                     entry = signal["price"]
                     stop = signal["stop"]
 
                     risk = abs(entry - stop)
 
-                    if signal["type"] == "BUY":
-                        target = entry + risk
-                    else:
-                        target = entry - risk
-
-                    state.active = True
-                    state.type = signal["type"]
-                    state.entry = entry
-                    state.stop = stop
-                    state.target = target
-                    state.rsi_signal = signal["rsi"]
+                    target = entry + risk if signal["type"] == "BUY" else entry - risk
 
                     message = f"""
 🚀 {index} {signal["type"]} SIGNAL
 
-RSI: {signal["rsi"]}
+Price: {entry}
 
-Entry: {entry}
+5m RSI: {signal["rsi5"]}
+15m RSI: {signal["rsi15"]}
+
+RSI Expansion: {signal["expansion"]}
+RSI Regime: {signal["regime"]}
+RSI Compression Break: {signal["compression"]}
+
 Stoploss: {stop}
 Target: {round(target,2)}
 
@@ -231,63 +258,12 @@ Action:
 
                     send_telegram(message)
 
-                if state.active:
-
-                    df = fetch_candles(index)
-
-                    price = df["close"].iloc[-1]
-                    rsi_now = df["rsi"].iloc[-1]
-
-                    if not state.alert_sent and rsi_now >= state.rsi_signal + 2:
-
-                        send_telegram(f"""
-⚠️ MOMENTUM BUILDING
-
-{index}
-RSI: {round(rsi_now,2)}
-""")
-
-                        state.alert_sent = True
-
-                    if not state.expansion_sent and rsi_now >= state.rsi_signal + 4:
-
-                        send_telegram(f"""
-🚀 MOMENTUM EXPANSION
-
-{index}
-RSI: {round(rsi_now,2)}
-""")
-
-                        state.expansion_sent = True
-
-                    if not state.partial_done and (
-                        (state.type=="BUY" and price >= state.target) or
-                        (state.type=="SELL" and price <= state.target)
-                    ):
-
-                        state.partial_done = True
-
-                        send_telegram(f"""
-🎯 TARGET HIT
-
-{index}
-Book 50% Partial Profit
-""")
-
-                    if (
-                        (state.type=="BUY" and price <= state.stop) or
-                        (state.type=="SELL" and price >= state.stop)
-                    ):
-
-                        send_telegram(f"""
-⚠️ STOPLOSS TRIGGERED
-
-{index}
-""")
-
-                        states[index] = TradeState()
-
         time.sleep(SCAN_INTERVAL)
+
+
+# ================================
+# START ENGINE
+# ================================
 
 if __name__ == "__main__":
     run()
